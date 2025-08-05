@@ -1,0 +1,157 @@
+------ p1
+
+CREATE SCHEMA IF NOT EXISTS pandemic;
+
+USE pandemic;
+
+
+------ p2
+
+use pandemic;
+
+DROP TABLE IF EXISTS infectious_cases_nf3;
+DROP TABLE IF EXISTS countries;
+
+CREATE TABLE countries(
+	id INT PRIMARY KEY AUTO_INCREMENT,
+	name VARCHAR(32) UNIQUE,
+	code VARCHAR(8) UNIQUE
+);
+
+INSERT INTO countries (name, code)
+	SELECT DISTINCT entity, code
+    FROM infectious_cases
+;
+
+CREATE TABLE infectious_cases_nf3 AS 
+	SELECT * 
+    FROM  infectious_cases
+;
+
+ALTER TABLE infectious_cases_nf3
+	ADD COLUMN case_id INT PRIMARY KEY AUTO_INCREMENT FIRST,
+    ADD COLUMN country_id INT AFTER case_id,
+	ADD CONSTRAINT fk_country_id FOREIGN KEY (country_id) REFERENCES countries(id)
+;
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE infectious_cases_nf3 cases
+JOIN countries ON countries.name = cases.entity
+SET cases.country_id = countries.id 
+WHERE cases.case_id IS NOT NULL
+;
+
+SET SQL_SAFE_UPDATES = 1;
+
+ALTER TABLE infectious_cases_nf3
+    DROP COLUMN entity,
+    DROP COLUMN code
+;
+
+
+------ p2_a
+
+use pandemic;
+SELECT COUNT(*) 
+FROM infectious_cases;
+
+
+------ p3
+
+use pandemic;
+
+SELECT
+    c.name,
+    icn.country_id,
+    ROUND(AVG(COALESCE(icn.Number_rabies, 0)), 4) AS avg_rabies,
+    ROUND(MIN(COALESCE(icn.Number_rabies, 0)), 4) AS min_rabies,
+    ROUND(MAX(COALESCE(icn.Number_rabies, 0)), 4) AS max_rabies
+FROM
+    infectious_cases_nf3 icn
+JOIN
+    countries c ON icn.country_id = c.id
+GROUP BY
+    icn.country_id
+ORDER BY
+	avg_rabies DESC
+LIMIT 10
+;
+
+
+------ p4
+
+use pandemic;
+
+ALTER TABLE infectious_cases_nf3
+	ADD COLUMN case_date DATE,
+	ADD COLUMN curr_date DATE,
+	ADD COLUMN years_diff INT
+;
+
+UPDATE infectious_cases_nf3
+SET
+    case_date = MAKEDATE(year, 1),
+    curr_date = CURRENT_DATE,
+    years_diff = TIMESTAMPDIFF(YEAR, case_date, current_date)
+WHERE
+	case_id > 0
+;
+
+SELECT 
+	Year,
+    case_date,
+    curr_date,
+    years_diff
+FROM infectious_cases_nf3
+;
+
+
+------ p5
+
+use pandemic;
+
+DELIMITER //
+
+CREATE FUNCTION get_year_diff(input_year INT)
+RETURNS INT
+DETERMINISTIC
+BEGIN
+	DECLARE start_date DATE;
+    DECLARE year_diff INT;
+    
+    SET start_date = MAKEDATE(input_year, 1);
+    SET year_diff = TIMESTAMPDIFF(YEAR, start_date, CURRENT_DATE);
+   
+   RETURN year_diff;
+END //
+
+DELIMITER ;
+
+
+------ p5_a
+
+use pandemic;
+
+ALTER TABLE infectious_cases_nf3
+	ADD COLUMN case_date DATE,
+	ADD COLUMN curr_date DATE,
+	ADD COLUMN years_diff INT
+;
+
+UPDATE infectious_cases_nf3
+SET
+    case_date = MAKEDATE(year, 1),
+    curr_date = CURRENT_DATE,
+    years_diff = get_year_diff(Year)
+WHERE
+	case_id > 0
+;
+
+SELECT 
+	Year,
+    case_date,
+    curr_date,
+    years_diff
+FROM infectious_cases_nf3
+;
